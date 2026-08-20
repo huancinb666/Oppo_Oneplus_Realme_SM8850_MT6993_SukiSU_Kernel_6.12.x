@@ -376,12 +376,18 @@ jobs:
           echo "CONFIG_RUST=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_ANDROID_BINDER_IPC_RUST=m" >> ./common/arch/arm64/configs/gki_defconfig
           
+          # ===== 模块加载配置（重要！解决模块加载 Invalid argument 问题） =====
+          echo "CONFIG_MODULES=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MODULE_UNLOAD=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MODULE_FORCE_LOAD=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MODVERSIONS=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MODULE_SRCVERSION_ALL=n" >> ./common/arch/arm64/configs/gki_defconfig
+          
           # ===== 网卡驱动配置 =====
           echo "CONFIG_CFG80211=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_CFG80211_WEXT=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_MAC80211=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_WLAN=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_MODULES=y" >> ./common/arch/arm64/configs/gki_defconfig
 
           echo "CONFIG_WLAN_VENDOR_RALINK=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00=m" >> ./common/arch/arm64/configs/gki_defconfig
@@ -698,7 +704,7 @@ jobs:
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ${{ env.CCACHE_REAL_KEY }}-${{ runner.os }}-${{ github.ref_name }}
-         
+
       - name: 应用KPM并修补内核
         if: inputs.kpm_enable && github.event.inputs.build_mode == 'full'
         run: |
@@ -840,7 +846,7 @@ jobs:
       contents: write
       packages: write
       actions: read
-      
+
     steps:
       - name: 下载 ZIP 工件
         uses: actions/download-artifact@v8
