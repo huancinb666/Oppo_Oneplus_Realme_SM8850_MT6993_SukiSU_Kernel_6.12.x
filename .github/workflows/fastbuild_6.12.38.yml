@@ -11,14 +11,6 @@ env:
 on:
   workflow_dispatch:
     inputs:
-      build_mode:
-        description: '构建模式 (完整内核+AK3 / 仅驱动模块)'
-        required: true
-        type: choice
-        default: 'full'
-        options:
-          - 'full'
-          - 'modules'
       lz4_enable:
         description: '是否安装 lz4 1.10.0+zstd 1.5.7 补丁'
         required: true
@@ -275,14 +267,17 @@ jobs:
           echo "CONFIG_MODULES=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_MODULE_UNLOAD=y" >> ./common/arch/arm64/configs/gki_defconfig
           
+          # ★★★ 关闭 CONFIG_MODVERSIONS（符号版本校验）★★★
+          echo "CONFIG_MODVERSIONS=n" >> ./common/arch/arm64/configs/gki_defconfig
+          
           # ============================================================
-          # ★★★ 无线网卡驱动 ★★★
+          # ★★★ 无线网卡驱动（全部编译为模块 =m）★★★
           # ============================================================
           
           # ---- 通用框架 ----
-          echo "CONFIG_CFG80211=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_CFG80211=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_CFG80211_WEXT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_MAC80211=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MAC80211=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_WLAN=y" >> ./common/arch/arm64/configs/gki_defconfig
           
           # ---- Atheros / Qualcomm (AR9271) ----
@@ -292,15 +287,15 @@ jobs:
           echo "CONFIG_ATH9K_COMMON=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_ATH9K_HTC=m" >> ./common/arch/arm64/configs/gki_defconfig
           
-          # ---- Ralink (RT5572) 全部内置（=y） ----
+          # ---- Ralink (RT5572) 编译为模块（=m） ----
           echo "CONFIG_WLAN_VENDOR_RALINK=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_RT2X00=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_RT2X00_LIB=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_RT2X00_LIB_USB=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT2X00=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT2X00_LIB=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT2X00_LIB_USB=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00_LIB_FIRMWARE=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00_LIB_CRYPTO=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_RT2800_LIB=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_RT2800USB=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT2800_LIB=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT2800USB=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2800USB_RT33XX=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2800USB_RT35XX=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2800USB_RT3573=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -453,7 +448,7 @@ jobs:
           sed -i 's/${scm_version}//' ./common/scripts/setlocalversion
           echo "CONFIG_LOCALVERSION_AUTO=n" >> ./common/arch/arm64/configs/gki_defconfig
 
-      - name: 构建内核/模块
+      - name: 构建内核和模块
         run: |
           WORKDIR="$(pwd)"
           export PATH="/usr/lib/ccache:$PATH"
@@ -555,21 +550,13 @@ jobs:
           make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="clang" LD="ld.lld" OBJCOPY="llvm-objcopy" O=out gki_defconfig &&
           export CC="$(pwd)/cc-wrapper" && export LD="$(pwd)/ld-wrapper" &&
           
-          if [[ "${{ github.event.inputs.build_mode }}" == "full" ]]; then
-            echo "=== 完整模式：编译完整内核（使用 O=out）==="
-            make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
-              CC="$(pwd)/cc-wrapper" LD="$(pwd)/ld-wrapper" OBJCOPY="llvm-objcopy" O=out
-            
-            echo "=== 编译所有模块 ==="
-            make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
-              CC="$(pwd)/cc-wrapper" LD="$(pwd)/ld-wrapper" OBJCOPY="llvm-objcopy" O=out modules
-          else
-            echo "=== 模块模式：仅编译驱动模块 ==="
-            make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
-              CC="$(pwd)/cc-wrapper" LD="$(pwd)/ld-wrapper" OBJCOPY="llvm-objcopy" O=out modules_prepare
-            make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
-              CC="$(pwd)/cc-wrapper" LD="$(pwd)/ld-wrapper" OBJCOPY="llvm-objcopy" O=out modules
-          fi
+          echo "=== 编译完整内核（使用 O=out）==="
+          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+            CC="$(pwd)/cc-wrapper" LD="$(pwd)/ld-wrapper" OBJCOPY="llvm-objcopy" O=out
+          
+          echo "=== 编译所有模块 ==="
+          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+            CC="$(pwd)/cc-wrapper" LD="$(pwd)/ld-wrapper" OBJCOPY="llvm-objcopy" O=out modules
           
           echo "--- 编译后环境时间: $(LD_PRELOAD=$PRELOAD_LIBS date) ---"
           echo "--- 编译后环境文件时间戳: ---"
@@ -596,7 +583,6 @@ jobs:
           key: ${{ env.CCACHE_REAL_KEY }}-${{ runner.os }}-${{ github.ref_name }}
 
       - name: 检查生成的文件
-        if: github.event.inputs.build_mode == 'full'
         run: |
           cd kernel_workspace/common
           echo "=== 检查 out/arch/arm64/boot/ ==="
@@ -606,7 +592,6 @@ jobs:
 
       - name: 克隆 AnyKernel3 并打包
         id: create_zip
-        if: github.event.inputs.build_mode == 'full'
         run: |
           cd kernel_workspace
           git clone https://github.com/cctv18/AnyKernel3 --depth=1
@@ -660,8 +645,7 @@ jobs:
           echo "BBG: ${{ github.event.inputs.baseband_guard }}" >> ./ak3.log
           zip -z ../$AK3_NAME < ./ak3.log
 
-      - name: 收集模块（仅模块模式）
-        if: github.event.inputs.build_mode == 'modules'
+      - name: 收集所有模块
         run: |
           cd kernel_workspace
           mkdir -p modules_out
@@ -678,14 +662,12 @@ jobs:
           archive: false
 
       - name: 上传 ZIP 工件
-        if: github.event.inputs.build_mode == 'full'
         uses: actions/upload-artifact@v7
         with:
           path: ${{ github.workspace }}/kernel_workspace/AnyKernel*.zip
           archive: false
 
-      - name: 上传模块工件（仅模块模式）
-        if: github.event.inputs.build_mode == 'modules'
+      - name: 上传模块工件
         uses: actions/upload-artifact@v7
         with:
           name: kernel-modules
@@ -694,7 +676,6 @@ jobs:
 
   release:
     needs: build
-    if: github.event.inputs.build_mode == 'full'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -706,6 +687,13 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.ak3name }}
+          path: ./release_zips
+          skip-decompress: true
+
+      - name: 下载模块工件
+        uses: actions/download-artifact@v8
+        with:
+          name: kernel-modules
           path: ./release_zips
           skip-decompress: true
 
@@ -750,12 +738,14 @@ jobs:
           
           ### ⏫️ 更新内容：
           - 纯净内核，无任何root组件
-          - cfg80211 和 mac80211 已内置（=y）
-          - ★★★ RT5572 驱动已全部内置（=y），插上自动识别 ★★★
-          - 支持常见USB网卡：AR9271、MT7601U、RTL8187、RTL8192CU、RTL8812AU
+          - ★★★ 所有无线驱动编译为模块（=m）★★★
+          - ★★★ 已关闭 CONFIG_MODVERSIONS，模块加载不再有符号校验 ★★★
+          - 支持常见USB网卡：AR9271、RT5572、MT7601U、RTL8187、RTL8192CU、RTL8812AU
           
           ### 📋 安装方法
-          1. 通过 Recovery 或 KernelFlasher 刷入
+          1. 刷入 AnyKernel3_*.zip
+          2. 从 kernel-modules.zip 提取需要的 .ko 文件
+          3. 按顺序 insmod 加载
           
           #### ※※※刷写内核有风险，请提前备份boot分区※※※
           EOF
