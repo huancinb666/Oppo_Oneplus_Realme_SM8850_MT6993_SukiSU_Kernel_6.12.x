@@ -19,11 +19,6 @@ on:
         options:
           - 'full'
           - 'modules'
-      susfs_enable:
-        description: '是否开启susfs'
-        required: true
-        type: boolean
-        default: 'false'
       lz4_enable:
         description: '是否安装 lz4 1.10.0+zstd 1.5.7 补丁'
         required: true
@@ -281,13 +276,13 @@ jobs:
           echo "CONFIG_MODULE_UNLOAD=y" >> ./common/arch/arm64/configs/gki_defconfig
           
           # ============================================================
-          # ★★★ 无线网卡驱动（USB 为主）★★★
+          # ★★★ 无线网卡驱动 ★★★
           # ============================================================
           
           # ---- 通用框架 ----
-          echo "CONFIG_CFG80211=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_CFG80211=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_CFG80211_WEXT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_MAC80211=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MAC80211=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_WLAN=y" >> ./common/arch/arm64/configs/gki_defconfig
           
           # ---- Atheros / Qualcomm (AR9271) ----
@@ -297,21 +292,20 @@ jobs:
           echo "CONFIG_ATH9K_COMMON=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_ATH9K_HTC=m" >> ./common/arch/arm64/configs/gki_defconfig
           
-          # ---- Ralink (RT5572) ----
+          # ---- Ralink (RT5572) 内置（=y） ----
           echo "CONFIG_WLAN_VENDOR_RALINK=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_RT2X00=m" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_RT2X00_LIB=m" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_RT2X00_LIB_USB=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT2X00=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT2X00_LIB=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT2X00_LIB_USB=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00_LIB_FIRMWARE=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00_LIB_CRYPTO=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_RT2800USB=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT2800USB=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2800USB_RT33XX=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2800USB_RT35XX=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2800USB_RT3573=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2800USB_RT53XX=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2800USB_RT55XX=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2800USB_UNKNOWN=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_RT73USB=m" >> ./common/arch/arm64/configs/gki_defconfig
           
           # ---- MediaTek (MT7601U) ----
           echo "CONFIG_WLAN_VENDOR_MEDIATEK=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -740,7 +734,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cat << 'EOF' > release_notes.md
-          ### 📱 欧加真 纯净内核 | 构建信息
+          ### 📱 欧加真 Nethunter 纯净内核 | 构建信息
           - 内核版本号: ${{ env.FULL_VERSION }}
           - 编译时间: ${{ env.TIME_FORM }}
           - 机型：欧加真骁龙8E Gen5通用 ${{ env.KERNEL_VERSION }}.${{ env.SUB_VERSION }} 内核
@@ -755,7 +749,9 @@ jobs:
           
           ### ⏫️ 更新内容：
           - 纯净内核，无任何root组件
-          - 支持常见USB网卡：AR9271、RT5572、MT7601U、RTL8187、RTL8192CU、RTL8812AU
+          - cfg80211 和 mac80211 已内置（=y）
+          - RT5572 驱动已内置（=y），插上自动识别
+          - 支持常见USB网卡：AR9271、MT7601U、RTL8187、RTL8192CU、RTL8812AU
           
           ### 📋 安装方法
           1. 通过 Recovery 或 KernelFlasher 刷入
