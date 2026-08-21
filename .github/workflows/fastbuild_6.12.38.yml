@@ -25,12 +25,12 @@ on:
         type: boolean
         default: 'false'
       lz4kd_enable:
-        description: '是否安装 LZ4KD 补丁(若已开启lz4+zstd补丁则可不开启)'
+        description: '是否安装 LZ4KD 补丁'
         required: true
         type: boolean
         default: 'false'
       bbr_enable:
-        description: "是否启用bbr算法(优化上行数据,对手机日用无太大意义甚至可能负优化;false关闭,true仅加入算法,default启用算法并设为默认)"
+        description: "是否启用bbr算法"
         required: true
         type: choice
         default: 'false'
@@ -39,7 +39,7 @@ on:
           - 'true'
           - 'default'
       droidspaces_enable:
-        description: '是否启用Droidspaces容器支持(轻量化的完整Linux容器支持;false关闭,standard开启容器+ntsync支持,extend开启更多测试支持项)'
+        description: '是否启用Droidspaces容器支持'
         required: true
         type: choice
         default: 'false'
@@ -48,37 +48,37 @@ on:
           - 'standard'
           - 'extend'
       better_net:
-        description: '是否开启网络功能拓展配置(用于为ipset及需要iptables等高级网络功能内核支持的程序提供支持)'
+        description: '是否开启网络功能拓展配置'
         required: true
         type: boolean
         default: 'false'
       adios_enable:
-        description: '是否启用ADIOS IO调度器支持(提升IO读写性能)'
+        description: '是否启用ADIOS IO调度器'
         required: true
         type: boolean
         default: 'false'
       rekernel_enable:
-        description: '是否启用Re-Kernel支持(与Freezer/NoActive等软件配合, 提升应用冻结能力)'
+        description: '是否启用Re-Kernel支持'
         required: true
         type: boolean
         default: 'false'
       baseband_guard:
-        description: '是否开启内核级基带保护(阻止一切对非用户分区的写入，有效防止格机)'
+        description: '是否开启内核级基带保护'
         required: true
         type: boolean
         default: 'false'
       ccache_update:
-        description: '更新ccache缓存(将本次编译生成的ccache缓存覆盖至仓库缓存，在更改编译配置、源码或需要刷新缓存时开启)'
+        description: '更新ccache缓存'
         required: true
         type: boolean
         default: 'false'
       ccache_debug:
-        description: '是否上传 Ccache调试日志(用于调试, 无需要不必开启)'
+        description: '是否上传 Ccache调试日志'
         required: true
         type: boolean
         default: 'false'
       kernel_suffix:
-        description: '内核后缀(留空默认,开头别加连字符,勿加空格等影响指令运行的保留字符)'
+        description: '内核后缀'
         required: false
         type: string
         default: ''
@@ -251,7 +251,7 @@ jobs:
           echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
           
-          # ===== ZRAM 后端配置（启用所有主流后端，避免启动崩溃） =====
+          # ===== ZRAM 后端配置 =====
           if [[ "${{ github.event.inputs.lz4kd_enable }}" == "true" ]]; then
             echo "CONFIG_ZSMALLOC=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_CRYPTO_LZ4HC=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -271,9 +271,50 @@ jobs:
           echo "CONFIG_RUST=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_ANDROID_BINDER_IPC_RUST=m" >> ./common/arch/arm64/configs/gki_defconfig
           
-          # ===== 模块加载配置（稳定版：不强制加载，不关闭版本校验） =====
+          # ===== 模块加载配置 =====
           echo "CONFIG_MODULES=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_MODULE_UNLOAD=y" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # ============================================================
+          # ★★★ 常见无线网卡驱动（USB 为主）★★★
+          # ============================================================
+          
+          # ---- 通用框架 ----
+          echo "CONFIG_CFG80211=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_CFG80211_WEXT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MAC80211=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_WLAN=y" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # ---- Atheros / Qualcomm (AR9271) ----
+          echo "CONFIG_WLAN_VENDOR_ATH=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_ATH_COMMON=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_ATH9K_HW=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_ATH9K_COMMON=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_ATH9K_HTC=m" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # ---- Ralink / MediaTek (RT5572, MT7601) ----
+          echo "CONFIG_WLAN_VENDOR_RALINK=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT2X00_LIB=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT2X00_LIB_USB=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT2X00_LIB_FIRMWARE=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT2800USB=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT73USB=m" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          echo "CONFIG_WLAN_VENDOR_MEDIATEK=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MT7601U=m" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # ---- Realtek (RTL8187, RTL8192, RTL8812) ----
+          echo "CONFIG_WLAN_VENDOR_REALTEK=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RTL_CARDS=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RTL8187=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RTL8192CU=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RTLWIFI=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RTLWIFI_USB=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RTL8XXXU=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RTL8XXXU_UNTESTED=y" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # ---- 加密库支持 ----
+          echo "CONFIG_CRYPTO_LIB_ARC4=m" >> ./common/arch/arm64/configs/gki_defconfig
           
           cd common
           wget https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/other_patch/cve-2026-43499-rtmutex-6.12.patch
@@ -700,13 +741,12 @@ jobs:
           
           ### ⏫️ 更新内容：
           - 纯净内核，无任何root组件
-          - 你可以在 init_boot 上自己修补root
+          - 支持常见USB网卡：AR9271、RT5572、MT7601U、RTL8187、RTL8192CU、RTL8812AU
           
-          ### 📋 安装方法 | Installation Guide
-          1. 若你的手机已经安装了第三方Recovery（如TWRP)，可下载对应机型的AnyKernel刷机包后进入Recovery模式，通过Recovery刷入刷机包后重启设备；
-          2. 若你的手机之前已有 root 权限，可在手机上安装[HorizonKernelFlasher](https://github.com/libxzr/HorizonKernelFlasher/releases)，在HorizonKernelFlasher中刷入AnyKernel刷机包并重启；
+          ### 📋 安装方法
+          1. 通过 Recovery 或 KernelFlasher 刷入
           
-          #### ※※※刷写内核有风险，为防止出现意外导致手机变砖，在刷入内核前请务必用[KernelFlasher](https://github.com/capntrips/KernelFlasher)等软件备份boot等关键启动分区!※※※
+          #### ※※※刷写内核有风险，请提前备份boot分区※※※
           EOF
 
           gh release create "${{ env.TAG_HEAD }}-${{ env.TIME }}" \
