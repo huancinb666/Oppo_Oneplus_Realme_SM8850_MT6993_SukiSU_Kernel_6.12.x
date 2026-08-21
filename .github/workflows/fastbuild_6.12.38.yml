@@ -292,13 +292,14 @@ jobs:
           echo "CONFIG_ATH9K_COMMON=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_ATH9K_HTC=m" >> ./common/arch/arm64/configs/gki_defconfig
           
-          # ---- Ralink (RT5572) 内置（=y） ----
+          # ---- Ralink (RT5572) 全部内置（=y） ----
           echo "CONFIG_WLAN_VENDOR_RALINK=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00_LIB=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00_LIB_USB=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00_LIB_FIRMWARE=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00_LIB_CRYPTO=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT2800_LIB=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2800USB=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2800USB_RT33XX=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2800USB_RT35XX=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -750,7 +751,7 @@ jobs:
           ### ⏫️ 更新内容：
           - 纯净内核，无任何root组件
           - cfg80211 和 mac80211 已内置（=y）
-          - RT5572 驱动已内置（=y），插上自动识别
+          - ★★★ RT5572 驱动已全部内置（=y），插上自动识别 ★★★
           - 支持常见USB网卡：AR9271、MT7601U、RTL8187、RTL8192CU、RTL8812AU
           
           ### 📋 安装方法
