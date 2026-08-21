@@ -1,4 +1,4 @@
-name: 6.12.38 欧加真OKI内核快速构建
+name: 6.12.38 欧加真OKI内核快速构建（修复版）
 
 env:
   TZ: Asia/Shanghai
@@ -34,7 +34,7 @@ on:
         description: '是否开启susfs(用于增强隐藏环境挂载功能; 可能轻微增加耗电，上游更新导致不稳定时或不需要可关闭)'
         required: true
         type: boolean
-        default: 'true'
+        default: 'false'  # 默认关闭，先确保能开机
       kpm_enable:
         description: '是否开启kpm(使用KpatchNext独立实现kpm(支持任意KSU/面具环境); 不需要可保持默认关闭)'
         required: true
@@ -44,7 +44,7 @@ on:
         description: '是否安装 lz4 1.10.0+zstd 1.5.7 补丁'
         required: true
         type: boolean
-        default: 'false'
+        default: 'false'  # 默认关闭，避免ZRAM后端冲突
       lz4kd_enable:
         description: '是否安装 LZ4KD 补丁(若已开启lz4+zstd补丁则可不开启)'
         required: true
@@ -77,7 +77,7 @@ on:
         description: '是否启用ADIOS IO调度器支持(提升IO读写性能)'
         required: true
         type: boolean
-        default: 'true'
+        default: 'false'  # 默认关闭
       rekernel_enable:
         description: '是否启用Re-Kernel支持(与Freezer/NoActive等软件配合, 提升应用冻结能力)'
         required: true
@@ -87,7 +87,7 @@ on:
         description: '是否开启内核级基带保护(阻止一切对非用户分区的写入，有效防止格机)'
         required: true
         type: boolean
-        default: 'true'
+        default: 'false'  # 默认关闭
       ccache_update:
         description: '更新ccache缓存(将本次编译生成的ccache缓存覆盖至仓库缓存，在更改编译配置、源码或需要刷新缓存时开启)'
         required: true
@@ -348,7 +348,7 @@ jobs:
           echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_SUS_MAP=y" >> ./common/arch/arm64/configs/gki_defconfig
           
-      - name: 添加 KSU & 其他配置项 + 网卡驱动（禁用ZSTD避免编译错误）
+      - name: 添加 KSU & 其他配置项（修复版）
         run: |
           cd kernel_workspace
           echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -357,38 +357,40 @@ jobs:
           fi
           echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # ===== ZRAM 后端配置（修复版：启用所有主流后端，避免启动崩溃） =====
           if [[ "${{ github.event.inputs.lz4kd_enable }}" == "true" ]]; then
             echo "CONFIG_ZSMALLOC=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_CRYPTO_LZ4HC=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_CRYPTO_LZ4K=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_CRYPTO_LZ4KD=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_CRYPTO_842=y" >> ./common/arch/arm64/configs/gki_defconfig
-            # 只启用 LZ4 后端，禁用 ZSTD 避免编译错误
             echo "CONFIG_ZRAM_BACKEND_LZ4HC=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_ZRAM_BACKEND_LZ4K=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_ZRAM_BACKEND_LZ4KD=y" >> ./common/arch/arm64/configs/gki_defconfig
-            # CONFIG_ZRAM_BACKEND_842 is not set
-            # CONFIG_ZRAM_BACKEND_ZSTD is not set
+            echo "CONFIG_ZRAM_BACKEND_842=y" >> ./common/arch/arm64/configs/gki_defconfig
+            # ★★★ 关键修复：必须启用 zstd 后端，否则系统 init 无法初始化 ZRAM ★★★
+            echo "CONFIG_ZRAM_BACKEND_ZSTD=y" >> ./common/arch/arm64/configs/gki_defconfig
           fi
+          
           echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> ./common/arch/arm64/configs/gki_defconfig
           sed -i 's/check_defconfig//' ./common/build.config.gki
           echo "CONFIG_HEADERS_INSTALL=n" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RUST=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_ANDROID_BINDER_IPC_RUST=m" >> ./common/arch/arm64/configs/gki_defconfig
           
-          # ===== 模块加载配置（解决模块加载 Invalid argument 问题） =====
+          # ===== ★★★ 核心修复：模块加载配置（移除 FORCE_LOAD 和 MODVERSIONS 禁用）★★★ =====
           echo "CONFIG_MODULES=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_MODULE_UNLOAD=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_MODULE_FORCE_LOAD=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_MODVERSIONS=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_MODULE_SRCVERSION_ALL=n" >> ./common/arch/arm64/configs/gki_defconfig
+          # CONFIG_MODULE_FORCE_LOAD 已注释，不再强制加载不兼容模块
+          # CONFIG_MODVERSIONS 保持默认启用（即不关闭），确保模块ABI一致性检查
+          # CONFIG_MODULE_SRCVERSION_ALL 保持默认禁用即可
           
-          # ===== 网卡驱动配置 =====
+          # ===== 网卡驱动配置（保持原样） =====
           echo "CONFIG_CFG80211=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_CFG80211_WEXT=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_MAC80211=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_WLAN=y" >> ./common/arch/arm64/configs/gki_defconfig
-
           echo "CONFIG_WLAN_VENDOR_RALINK=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2500USB=m" >> ./common/arch/arm64/configs/gki_defconfig
@@ -406,13 +408,11 @@ jobs:
           echo "CONFIG_RT2X00_LIB_FIRMWARE=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00_LIB_CRYPTO=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00_LIB_LEDS=y" >> ./common/arch/arm64/configs/gki_defconfig
-
           echo "CONFIG_ATH_COMMON=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_WLAN_VENDOR_ATH=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_ATH9K_HW=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_ATH9K_COMMON=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_ATH9K_HTC=m" >> ./common/arch/arm64/configs/gki_defconfig
-
           echo "CONFIG_WLAN_VENDOR_REALTEK=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RTL_CARDS=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RTL8187=m" >> ./common/arch/arm64/configs/gki_defconfig
@@ -423,10 +423,8 @@ jobs:
           echo "CONFIG_RTL8192C_COMMON=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RTL8XXXU=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RTL8XXXU_UNTESTED=y" >> ./common/arch/arm64/configs/gki_defconfig
-
           echo "CONFIG_WLAN_VENDOR_MEDIATEK=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_MT7601U=m" >> ./common/arch/arm64/configs/gki_defconfig
-
           echo "CONFIG_CRYPTO_LIB_ARC4=m" >> ./common/arch/arm64/configs/gki_defconfig
 
           cd common
@@ -662,9 +660,6 @@ jobs:
           make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="clang" LD="ld.lld" OBJCOPY="llvm-objcopy" O=out gki_defconfig &&
           export CC="$(pwd)/cc-wrapper" && export LD="$(pwd)/ld-wrapper" &&
           
-          # ============================================================
-          # 模式判断：full = 完整内核 + AK3，modules = 仅驱动模块
-          # ============================================================
           if [[ "${{ github.event.inputs.build_mode }}" == "full" ]]; then
             echo "=== 完整模式：编译完整内核（使用 O=out）==="
             make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
@@ -735,7 +730,6 @@ jobs:
           rm -rf ./AnyKernel3/.git
           cd AnyKernel3
           
-          # 查找 Image 位置
           IMAGE_PATH=$(find ../common/out -name "Image" 2>/dev/null | head -1)
           if [ -z "$IMAGE_PATH" ]; then
             echo "未找到 Image，尝试查找 vmlinux"
@@ -893,7 +887,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cat << 'EOF' > release_notes.md
-          ### 📱 欧加真 ${{ env.KSU_TYPENAME }} sm8850 通用内核 | 构建信息
+          ### 📱 欧加真 ${{ env.KSU_TYPENAME }} sm8845 通用内核 | 构建信息
           - 内核版本号: ${{ env.FULL_VERSION }}
           - 编译时间: ${{ env.TIME_FORM }}
           - 机型：欧加真骁龙8E Gen5通用 ${{ env.KERNEL_VERSION }}.${{ env.SUB_VERSION }} 内核
