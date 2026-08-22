@@ -1,12 +1,12 @@
-name: 6.12.38 欧加真OKI内核快速构建
+name: 6.12.38 欧加真 NetHunter 内核构建
 
 env:
   TZ: Asia/Shanghai
   ANDROID_VERSION: 'android16'
   KERNEL_VERSION: '6.12'
   SUB_VERSION: '38'
-  KERNEL_NAME: 'huanci-kali-nethunter'
-  CCACHE_KEY: ccache-ecsv4-6.12.38
+  KERNEL_NAME: 'huanci-nethunter-kali'
+  CCACHE_KEY: ccache-nethunter-6.12.38
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ on:
         description: '是否安装 lz4 1.10.0+zstd 1.5.7 补丁'
         required: true
         type: boolean
-        default: 'false'
+        default: 'true'
       lz4kd_enable:
         description: '是否安装 LZ4KD 补丁'
         required: true
@@ -43,12 +43,12 @@ on:
         description: '是否开启网络功能拓展配置'
         required: true
         type: boolean
-        default: 'false'
+        default: 'true'
       adios_enable:
         description: '是否启用ADIOS IO调度器'
         required: true
         type: boolean
-        default: 'false'
+        default: 'true'
       rekernel_enable:
         description: '是否启用Re-Kernel支持'
         required: true
@@ -58,7 +58,7 @@ on:
         description: '是否开启内核级基带保护'
         required: true
         type: boolean
-        default: 'false'
+        default: 'true'
       ccache_update:
         description: '更新ccache缓存'
         required: true
@@ -237,13 +237,19 @@ jobs:
           wget https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/other_patch/lz4kd.patch
           patch -p1 -F 3 < lz4kd.patch || true
           
-      - name: 添加内核配置项
+      - name: 添加 NetHunter 内核配置项
         run: |
           cd kernel_workspace
+          
+          # ---- 基础配置 ----
           echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> ./common/arch/arm64/configs/gki_defconfig
+          sed -i 's/check_defconfig//' ./common/build.config.gki
+          echo "CONFIG_HEADERS_INSTALL=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RUST=y" >> ./common/arch/arm64/configs/gki_defconfig
           
-          # ===== ZRAM 后端配置 =====
+          # ---- ZRAM 后端配置 ----
           if [[ "${{ github.event.inputs.lz4kd_enable }}" == "true" ]]; then
             echo "CONFIG_ZSMALLOC=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_CRYPTO_LZ4HC=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -254,41 +260,116 @@ jobs:
             echo "CONFIG_ZRAM_BACKEND_LZ4K=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_ZRAM_BACKEND_LZ4KD=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_ZRAM_BACKEND_842=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_ZRAM_BACKEND_ZSTD=y" >> ./common/arch/arm64/configs/gki_defconfig
           fi
           
-          echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> ./common/arch/arm64/configs/gki_defconfig
-          sed -i 's/check_defconfig//' ./common/build.config.gki
-          echo "CONFIG_HEADERS_INSTALL=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_RUST=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_ANDROID_BINDER_IPC_RUST=m" >> ./common/arch/arm64/configs/gki_defconfig
-          
-          # ===== 模块加载配置 =====
+          # ---- 模块加载配置 ----
           echo "CONFIG_MODULES=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_MODULE_UNLOAD=y" >> ./common/arch/arm64/configs/gki_defconfig
-          
-          # ★★★ 关闭 CONFIG_MODVERSIONS（符号版本校验）★★★
+          echo "CONFIG_MODULE_FORCE_UNLOAD=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_MODVERSIONS=n" >> ./common/arch/arm64/configs/gki_defconfig
           
-          # ============================================================
-          # ★★★ 无线网卡驱动（全部编译为模块 =m）★★★
-          # ============================================================
-          
-          # ---- 通用框架 ----
+          # ---- 无线核心 ----
+          echo "CONFIG_WIRELESS=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_WIRELESS_EXT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_WEXT_CORE=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_WEXT_PROC=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_CFG80211=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_CFG80211_WEXT=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_MAC80211=m" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_WLAN=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MAC80211_MESH=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MAC80211_DEBUGFS=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MAC80211_MONITOR=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NL80211_TESTMODE=y" >> ./common/arch/arm64/configs/gki_defconfig
           
-          # ---- Atheros / Qualcomm (AR9271) ----
+          # ---- USB HID (BadUSB) ----
+          echo "CONFIG_USB=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_USB_SUPPORT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_USB_HID=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_USB_HIDDEV=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_HIDRAW=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_USB_G_HID=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_USB_GADGET=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_USB_GADGET_VBUS_DRAW=2" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_USB_CONFIGFS=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_USB_CONFIGFS_F_HID=y" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # ---- USB 网卡 ----
+          echo "CONFIG_USB_NET_DRIVERS=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_USB_NET_RNDIS_HOST=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_USB_NET_RNDIS_WLAN=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_USB_CDC_ETHER=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_USB_CDC_NCM=m" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # ---- 蓝牙 ----
+          echo "CONFIG_BT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_RFCOMM=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_RFCOMM_TTY=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_BNEP=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_BNEP_MC_FILTER=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_BNEP_PROTO_FILTER=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_HIDP=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_HS=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_LE=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_DEBUGFS=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_HCIBTUSB=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_HCIUART=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_HCIUART_H4=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_HCIUART_BCSP=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_HCIUART_ATH3K=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_HCIUART_LL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BT_HCIUART_3_WIRE=y" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # ---- 防火墙 ----
+          echo "CONFIG_NETFILTER=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NETFILTER_ADVANCED=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NF_CONNTRACK=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NF_CONNTRACK_MARK=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NF_CONNTRACK_ZONES=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NF_CONNTRACK_PROCFS=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NF_CONNTRACK_EVENTS=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NETFILTER_XTABLES=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NETFILTER_XT_MARK=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NETFILTER_XT_TARGET_MARK=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NETFILTER_XT_TARGET_NFLOG=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NETFILTER_XT_MATCH_MAC=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NETFILTER_XT_MATCH_MULTIPORT=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NETFILTER_XT_MATCH_STATE=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NETFILTER_XT_MATCH_CONNTRACK=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP_NF_IPTABLES=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP_NF_FILTER=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP_NF_TARGET_REJECT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP_NF_NAT=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP_NF_TARGET_MASQUERADE=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP_NF_TARGET_NETMAP=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP_NF_TARGET_REDIRECT=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP_NF_MANGLE=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP_NF_RAW=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP6_NF_IPTABLES=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP6_NF_FILTER=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP6_NF_MANGLE=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP6_NF_RAW=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP6_NF_NAT=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP6_NF_TARGET_MASQUERADE=m" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # ---- 加密库 ----
+          echo "CONFIG_CRYPTO_LIB_ARC4=m" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # ---- 网卡父级开关 ----
+          echo "CONFIG_WLAN=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_WLAN_VENDOR_ATH=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_WLAN_VENDOR_RALINK=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_WLAN_VENDOR_MEDIATEK=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_WLAN_VENDOR_REALTEK=y" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # ---- Atheros (AR9271) ----
+          echo "CONFIG_ATH_CARDS=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_ATH_COMMON=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_ATH9K_HW=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_ATH9K_COMMON=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_ATH9K_HTC=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_ATH9K_HTC_DEBUGFS=y" >> ./common/arch/arm64/configs/gki_defconfig
           
-          # ---- Ralink (RT5572) 编译为模块（=m） ----
-          echo "CONFIG_WLAN_VENDOR_RALINK=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # ---- Ralink (RT5572 / RT5370) ----
           echo "CONFIG_RT2X00=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00_LIB=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2X00_LIB_USB=m" >> ./common/arch/arm64/configs/gki_defconfig
@@ -302,28 +383,36 @@ jobs:
           echo "CONFIG_RT2800USB_RT53XX=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2800USB_RT55XX=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RT2800USB_UNKNOWN=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RT73USB=m" >> ./common/arch/arm64/configs/gki_defconfig
           
           # ---- MediaTek (MT7601U) ----
-          echo "CONFIG_WLAN_VENDOR_MEDIATEK=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_MT7601U=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MT76_CORE=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MT76x0U=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MT76x2U=m" >> ./common/arch/arm64/configs/gki_defconfig
           
-          # ---- Realtek (RTL8187, RTL8192, RTL8812) ----
-          echo "CONFIG_WLAN_VENDOR_REALTEK=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # ---- Realtek ----
           echo "CONFIG_RTL_CARDS=m" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_RTL8187=m" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_RTL8192CU=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RTLWIFI=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RTLWIFI_USB=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RTL8187=m" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_RTL8192CU=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RTL8XXXU=m" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_RTL8XXXU_UNTESTED=y" >> ./common/arch/arm64/configs/gki_defconfig
           
-          # ---- 加密库支持 ----
-          echo "CONFIG_CRYPTO_LIB_ARC4=m" >> ./common/arch/arm64/configs/gki_defconfig
+          # ---- 内核功能 ----
+          echo "CONFIG_DEBUG_FS=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KALLSYMS=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KALLSYMS_ALL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_SYSFS=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_SYSCTL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_DEVTMPFS=y" >> ./common/arch/arm64/configs/gki_defconfig
           
+          # ---- 应用 CVE 补丁 ----
           cd common
           wget https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/other_patch/cve-2026-43499-rtmutex-6.12.patch
-          patch -p1 -F 3 < cve-2026-43499-rtmutex-6.12.patch
-          
+          patch -p1 -F 3 < cve-2026-43499-rtmutex-6.12.patch || true
+
       - name: 启用网络功能增强优化配置
         if: inputs.better_net
         run: |
@@ -439,11 +528,13 @@ jobs:
             for f in ./common/scripts/setlocalversion; do
               sed -i "\$s|echo \"\\\$res\"|echo \"-${{ github.event.inputs.kernel_suffix }}\"|" "$f"
             done
+            sudo sed -i 's/-4k/-${{ github.event.inputs.KERNEL_SUFFIX }}/g' ./common/arch/arm64/configs/gki_defconfig
           else
             echo "当前内核版本后缀：${{ env.KERNEL_NAME }}"
             for f in ./common/scripts/setlocalversion; do
               sed -i "\$s|echo \"\\\$res\"|echo \"-${{ env.KERNEL_NAME }}\"|" "$f"
             done
+            sudo sed -i 's/-4k/-${{ env.KERNEL_NAME }}/g' ./common/arch/arm64/configs/gki_defconfig
           fi
           sed -i 's/${scm_version}//' ./common/scripts/setlocalversion
           echo "CONFIG_LOCALVERSION_AUTO=n" >> ./common/arch/arm64/configs/gki_defconfig
@@ -550,18 +641,16 @@ jobs:
           make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="clang" LD="ld.lld" OBJCOPY="llvm-objcopy" O=out gki_defconfig &&
           export CC="$(pwd)/cc-wrapper" && export LD="$(pwd)/ld-wrapper" &&
           
-          echo "=== 编译完整内核（使用 O=out）==="
           make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
-            CC="$(pwd)/cc-wrapper" LD="$(pwd)/ld-wrapper" OBJCOPY="llvm-objcopy" O=out
+            CC="$(pwd)/cc-wrapper" LD="$(pwd)/ld-wrapper" OBJCOPY="llvm-objcopy" O=out Image
           
-          echo "=== 编译所有模块 ==="
           make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
             CC="$(pwd)/cc-wrapper" LD="$(pwd)/ld-wrapper" OBJCOPY="llvm-objcopy" O=out modules
           
           echo "--- 编译后环境时间: $(LD_PRELOAD=$PRELOAD_LIBS date) ---"
           echo "--- 编译后环境文件时间戳: ---"
           LD_PRELOAD=$PRELOAD_LIBS stat ./Makefile
-          echo "编译完成！"
+          echo "内核编译完成！"
           
           if [[ "${{ github.event.inputs.ccache_debug }}" == "true" ]]; then
             echo "正在打包ccache日志及调试信息..."
@@ -575,6 +664,24 @@ jobs:
           echo "编译后空间:"
           df -h
 
+      - name: 提取所有模块
+        run: |
+          cd kernel_workspace/common
+          
+          mkdir -p modules_all
+          
+          find out -name "*.ko" -type f 2>/dev/null | while read -r file; do
+            cp "$file" modules_all/
+            echo "  ✅ 提取: $(basename "$file")"
+          done
+          
+          MODULE_COUNT=$(ls -1 modules_all/*.ko 2>/dev/null | wc -l)
+          echo "共提取 ${MODULE_COUNT} 个模块"
+          
+          cd modules_all
+          zip -r ../all_modules.zip ./*
+          echo "✅ 所有模块打包完成: all_modules.zip"
+
       - name: 保存新的 ccache 缓存
         if: inputs.ccache_update || steps.ccache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
@@ -582,77 +689,25 @@ jobs:
           path: ${{ env.CCACHE_DIR }}
           key: ${{ env.CCACHE_REAL_KEY }}-${{ runner.os }}-${{ github.ref_name }}
 
-      - name: 检查生成的文件
-        run: |
-          cd kernel_workspace/common
-          echo "=== 检查 out/arch/arm64/boot/ ==="
-          ls -la out/arch/arm64/boot/ 2>/dev/null || echo "boot目录不存在"
-          echo "=== 检查 Image ==="
-          find out -name "Image*" -o -name "vmlinux" 2>/dev/null
-
       - name: 克隆 AnyKernel3 并打包
         id: create_zip
         run: |
           cd kernel_workspace
-          git clone https://github.com/cctv18/AnyKernel3 --depth=1
+          git clone https://github.com/osm0sis/AnyKernel3 --depth=1
           rm -rf ./AnyKernel3/.git
           cd AnyKernel3
           
-          IMAGE_PATH=$(find ../common/out -name "Image" 2>/dev/null | head -1)
-          if [ -z "$IMAGE_PATH" ]; then
-            echo "未找到 Image，尝试查找 vmlinux"
-            IMAGE_PATH=$(find ../common/out -name "vmlinux" 2>/dev/null | head -1)
-          fi
-          
-          if [ -z "$IMAGE_PATH" ]; then
-            echo "❌ 未找到内核镜像！"
-            exit 1
-          fi
-          
-          echo "✅ 找到内核镜像: $IMAGE_PATH"
-          cp $IMAGE_PATH ./Image
+          cp ../common/out/arch/arm64/boot/Image ./Image
+          cp ../common/all_modules.zip ./modules.zip
           
           if [[ -n "${{ github.event.inputs.kernel_suffix }}" ]]; then
-            AK3_NAME=AnyKernel3_${{ env.KERNEL_VERSION }}_${{ github.event.inputs.kernel_suffix }}.zip
+            AK3_NAME=AnyKernel3_Nethunter_${{ env.KERNEL_VERSION }}_${{ github.event.inputs.kernel_suffix }}.zip
           else
-            AK3_NAME=AnyKernel3_${{ env.KERNEL_VERSION }}.${{ env.SUB_VERSION }}-${{ env.KERNEL_NAME }}.zip
+            AK3_NAME=AnyKernel3_Nethunter_${{ env.KERNEL_VERSION }}_${{ env.KERNEL_NAME }}.zip
           fi
+          
           zip -r ../$AK3_NAME ./*
           echo "ak3name=$AK3_NAME" >> $GITHUB_OUTPUT
-          
-          CLEAN_SUB_VERSION="${{ env.SUB_VERSION }}"
-          CLEAN_SUB_VERSION="${CLEAN_SUB_VERSION%_mtk}"
-          if [[ -n "${{ github.event.inputs.kernel_suffix }}" ]]; then
-            FULL_VERSION=${{ env.KERNEL_VERSION }}.${CLEAN_SUB_VERSION}-${{ github.event.inputs.kernel_suffix }}
-          else
-            FULL_VERSION=${{ env.KERNEL_VERSION }}.${CLEAN_SUB_VERSION}-${{ env.KERNEL_NAME }}
-          fi
-          TIME_NOW="$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')"
-          echo "Author: $GITHUB_ACTOR" > ./ak3.log
-          echo "Repo: $GITHUB_REPOSITORY" >> ./ak3.log
-          echo "Branch: $GITHUB_REF_NAME" >> ./ak3.log
-          echo "Run ID: $GITHUB_RUN_ID" >> ./ak3.log
-          echo "Commit: $GITHUB_SHA" >> ./ak3.log
-          echo "Time: $TIME_NOW" >> ./ak3.log
-          echo "Kernel Ver: $FULL_VERSION" >> ./ak3.log
-          echo "LZ4: ${{ github.event.inputs.lz4_enable }}" >> ./ak3.log
-          echo "LZ4KD: ${{ github.event.inputs.lz4kd_enable }}" >> ./ak3.log
-          echo "IPset: ${{ github.event.inputs.better_net }}" >> ./ak3.log
-          echo "BBR&Brutal: ${{ github.event.inputs.bbr_enable }}" >> ./ak3.log
-          echo "Droidspaces: ${{ github.event.inputs.droidspaces_enable }}" >> ./ak3.log
-          echo "ADIOS: ${{ github.event.inputs.adios_enable }}" >> ./ak3.log
-          echo "Re-Kernel: ${{ github.event.inputs.rekernel_enable }}" >> ./ak3.log
-          echo "BBG: ${{ github.event.inputs.baseband_guard }}" >> ./ak3.log
-          zip -z ../$AK3_NAME < ./ak3.log
-
-      - name: 收集所有模块
-        run: |
-          cd kernel_workspace
-          mkdir -p modules_out
-          find common/out -name "*.ko" -exec cp {} modules_out/ \;
-          MODULE_COUNT=$(ls -1 modules_out/*.ko 2>/dev/null | wc -l)
-          echo "共收集 $MODULE_COUNT 个模块"
-          zip -r modules_only.zip modules_out/
 
       - name: 上传 Ccache 调试日志
         if: always() && inputs.ccache_debug
@@ -667,11 +722,11 @@ jobs:
           path: ${{ github.workspace }}/kernel_workspace/AnyKernel*.zip
           archive: false
 
-      - name: 上传模块工件
+      - name: 上传所有模块包
         uses: actions/upload-artifact@v7
         with:
-          name: kernel-modules
-          path: ${{ github.workspace }}/kernel_workspace/modules_only.zip
+          name: all-modules
+          path: ${{ github.workspace }}/kernel_workspace/common/all_modules.zip
           archive: false
 
   release:
@@ -687,13 +742,6 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.ak3name }}
-          path: ./release_zips
-          skip-decompress: true
-
-      - name: 下载模块工件
-        uses: actions/download-artifact@v8
-        with:
-          name: kernel-modules
           path: ./release_zips
           skip-decompress: true
 
@@ -714,7 +762,7 @@ jobs:
           TIME_FORM="$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')"
           echo "TIME=$TIME" >> $GITHUB_ENV
           echo "TIME_FORM=$TIME_FORM" >> $GITHUB_ENV
-          TAG_HEAD="OPPO-OPlus-Realme-build"
+          TAG_HEAD="OPPO-OPlus-Realme-NetHunter-build"
           echo "TAG_HEAD=$TAG_HEAD" >> $GITHUB_ENV
 
       - name: 创建发布
@@ -723,10 +771,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cat << 'EOF' > release_notes.md
-          ### 📱 欧加真 Nethunter 纯净内核 | 构建信息
+          ### 📱 NetHunter 内核 | 构建信息
           - 内核版本号: ${{ env.FULL_VERSION }}
           - 编译时间: ${{ env.TIME_FORM }}
           - 机型：欧加真骁龙8E Gen5通用 ${{ env.KERNEL_VERSION }}.${{ env.SUB_VERSION }} 内核
+          - 无内置 KernelSU
           - LZ4支持：${{ github.event.inputs.lz4_enable }}
           - LZ4KD支持：${{ github.event.inputs.lz4kd_enable }}
           - 网络功能增强：${{ github.event.inputs.better_net }}
@@ -737,14 +786,14 @@ jobs:
           - 内核级基带保护支持：${{ github.event.inputs.baseband_guard }}
           
           ### ⏫️ 更新内容：
-          - 纯净内核，无任何root组件
-          - ★★★ 所有无线驱动编译为模块（=m）★★★
-          - ★★★ 已关闭 CONFIG_MODVERSIONS，模块加载不再有符号校验 ★★★
-          - 支持常见USB网卡：AR9271、RT5572、MT7601U、RTL8187、RTL8192CU、RTL8812AU
+          - 纯净 NetHunter 内核，无任何 root 组件
+          - 所有驱动编译为模块（=m）
+          - 支持 USB 网卡：AR9271, MT7601U, RTL8187, RTL8192CU, RT5572, RT5370
+          - BadUSB (HID 键盘) 支持
           
           ### 📋 安装方法
           1. 刷入 AnyKernel3_*.zip
-          2. 从 kernel-modules.zip 提取需要的 .ko 文件
+          2. 从 all_modules.zip 提取需要的 .ko 文件
           3. 按顺序 insmod 加载
           
           #### ※※※刷写内核有风险，请提前备份boot分区※※※
